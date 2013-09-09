@@ -339,13 +339,37 @@ process_src_file_lastmod([{File1, LastMod1}|T1], [{File2, LastMod2}|T2], EnableP
             %% File was removed, do nothing...
             process_src_file_lastmod(T1, [{File2, LastMod2}|T2], EnablePatching);
         false ->
-            %% File is new, recompile...
-            recompile_src_file(File2, EnablePatching),
+            Module = list_to_atom(filename:basename(File2, ".erl")),
+            case code:which(Module) of
+                BeamFile when is_list(BeamFile) ->
+                    case filelib:last_modified(BeamFile) of
+                        BeamLastMod when LastMod2 > BeamLastMod ->
+                            recompile_src_file(File2, EnablePatching);
+                        _ ->
+                            %% The module is loaded after Sync...
+                            ok
+                    end;
+                _ ->
+                    %% File is new, recompile...
+                    recompile_src_file(File2, EnablePatching)
+            end,
             process_src_file_lastmod([{File1, LastMod1}|T1], T2, EnablePatching)
     end;
-process_src_file_lastmod([], [{File, _LastMod}|T2], EnablePatching) ->
-    %% File is new, recompile...
-    recompile_src_file(File, EnablePatching),
+process_src_file_lastmod([], [{File, LastMod}|T2], EnablePatching) ->
+    Module = list_to_atom(filename:basename(File, ".erl")),
+    case code:which(Module) of
+        BeamFile when is_list(BeamFile) ->
+            case filelib:last_modified(BeamFile) of
+                BeamLastMod when LastMod > BeamLastMod ->
+                    recompile_src_file(File, EnablePatching);
+                _ ->
+                    %% The module is loaded after Sync...
+                    ok
+            end;
+        _ ->
+            %% File is new, recompile...
+            recompile_src_file(File, EnablePatching)
+    end,
     process_src_file_lastmod([], T2, EnablePatching);
 process_src_file_lastmod([], [], _) ->
     %% Done.
